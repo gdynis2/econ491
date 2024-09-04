@@ -1,0 +1,22 @@
+```{r setup}
+setwd("/Users/khushal/Desktop/Econ491-DataAnalysis")
+library(tidyverse)
+library(stats)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(reshape2)
+```
+
+```{r, include=FALSE}
+calender = read_csv("calendar.csv")
+sales = read_csv("sales_train_validation.csv")
+prices = read_csv("sell_prices.csv")
+
+sales_pivot = pivot_longer(sales, starts_with('d_'), names_to = 'Date', values_to = 'Sales')
+
+df_train = left_join(sales_pivot, calender, by = 'Date')
+
+
+
+```
