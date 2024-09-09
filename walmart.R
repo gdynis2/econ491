@@ -6,7 +6,7 @@ library(dplyr)
 library(reshape2)
 
 df_cal <- read.csv('calendar.csv', stringsAsFactors = FALSE)
-df_cal$date <- as.Date(df_cal$date)
+df_cal$date = as.character(df_cal$date)
 df_sales_train <- read.csv('sales_train_validation.csv', stringsAsFactors = FALSE)
 df_prices <- read.csv('sell_prices.csv', stringsAsFactors = FALSE)
 
