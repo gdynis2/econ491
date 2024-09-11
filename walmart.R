@@ -34,6 +34,9 @@ df_train$event_type_1[is.na(df_train$event_type_1)] <- 'None'
 df_train$event_name_2[is.na(df_train$event_name_2)] <- 'None'
 df_train$event_type_2[is.na(df_train$event_type_2)] <- 'None'
 
+write.csv(df_train, "df_train.csv", row.names = FALSE)
+
+
 
 
 
