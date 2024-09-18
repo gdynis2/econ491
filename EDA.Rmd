@@ -1,0 +1,59 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r setup}
+setwd("/Users/khushal/Desktop/Econ491-Analysis/Walmart")
+library(tidyverse)
+library(stats)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(reshape2)
+library(data.table)
+library(scales)
+```
+
+```{r, include=FALSE}
+df = read.csv('df_train.csv')
+head(df)
+```
+
+```{r, include=FALSE}
+df_state = df %>% group_by(state_id) %>% summarise(total_sales = sum(sales))
+df_state_ave = df %>% group_by(state_id) %>% summarise(avg_sales = mean(sales))
+```
+
+```{r, include=TRUE}
+require(scales)
+#Graph
+ggplot(data = df_state, aes(x=state_id, y=total_sales, fill=state_id)) + 
+  geom_col(width = 0.8) + scale_y_continuous(labels = label_comma()) + 
+  labs(
+         x = "State",
+         y = "Total_Sales"
+        )
+```
+
+```{r, include=TRUE}
+ggplot(df_state_ave, aes(x=state_id, y=avg_sales, fill=state_id)) + 
+  geom_col(width = 0.7)+ labs(
+         x = "State",
+         y = "Average_Sales"
+        )
+```
+
+```{r,include=TRUE}
+df_weekday <- df %>% group_by(state_id, weekday) %>% summarise(total_sales = sum(sales))
+df_weekday <- df_weekday %>%
+  group_by(weekday) %>%
+  mutate(pct_sales = total_sales / sum(total_sales) * 100)
+ggplot(df_weekday, aes(x=weekday, y=total_sales, fill=state_id, label = paste0(round(pct_sales, 1), "%"))) + 
+  geom_col(width = 0.7)+ labs(
+         x = "State",
+         y = "Total_Sales"
+        ) + scale_y_continuous(labels = label_comma()) +
+  geom_text( 
+  size = 2, position = position_stack(vjust = 0.5),colour = "white")
+```
