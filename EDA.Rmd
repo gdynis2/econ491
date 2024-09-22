@@ -1,8 +1,16 @@
 ---
+title: "graphs"
+author: "Graham Dynis"
+date: "2024-09-18"
 output:
   pdf_document: default
   html_document: default
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
 ```{r setup}
 setwd("/Users/khushal/Desktop/Econ491-Analysis/Walmart")
 library(tidyverse)
@@ -16,9 +24,79 @@ library(scales)
 ```
 
 ```{r, include=FALSE}
-df = read.csv('df_train.csv')
-head(df)
+df_train = read.csv('df_train.csv')
+cat("Training Data Types:\n")
+str(df_train)
 ```
+
+```{r}
+df_train <- df_train %>%
+  mutate(month_year_index = (year - 2011) * 12 + month)
+df_train <- df_train %>%
+  mutate(month_year_index = month_year_index - min(month_year_index) + 1)
+head(df_train[, c("year", "month", "month_year_index")])
+```
+
+```{r}
+df_summary <- df_train %>%
+  group_by(month_year_index, state_id) %>%
+  summarise(total_sales = sum(sales, na.rm = TRUE))
+```
+
+```{r}
+df_train <- df_train %>%
+  mutate(month_year_label = paste(month, year, sep = "-"))
+```
+
+```{r}
+breaks_6_months <- seq(1, max(df_summary$month_year_index), by = 6)
+break_labels <- df_labels %>%
+  filter(month_year_index %in% breaks_6_months)
+```
+
+
+```{r}
+df_labels <- df_train %>%
+  select(month_year_index, month_year_label) %>%
+  distinct()
+```
+
+
+```{r}
+ggplot(df_summary, aes(x = month_year_index, y = total_sales, color = state_id, group = state_id)) +
+  geom_line(size = 1) +
+  labs(title = "Sum of Sales by Month-Year for Each State",
+       x = "Month-Year",
+       y = "Total Sales") +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_continuous(
+    breaks = breaks_6_months,
+    labels = break_labels$month_year_label
+  )
+```
+
+```{r}
+df_summary2 <- df_train %>%
+  group_by(month_year_index, cat_id) %>%
+  summarise(mean_sell_price = mean(sell_price, na.rm = TRUE))
+```
+
+```{r}
+ggplot(df_summary2, aes(x = month_year_index, y = mean_sell_price, color = cat_id, group = cat_id)) +
+  geom_line(size = 1) +
+  labs(title = "Mean Sell Price by Category (cat_id) Over Time",
+       x = "Month-Year Index",
+       y = "Mean Sell Price") +
+  theme_minimal() +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_x_continuous(breaks = breaks_6_months,
+                     labels = break_labels$month_year_label)
+```
+
+
 
 ```{r, include=FALSE}
 df_state = df %>% group_by(state_id) %>% summarise(total_sales = sum(sales))
@@ -36,6 +114,9 @@ ggplot(data = df_state, aes(x=state_id, y=total_sales, fill=state_id)) +
         )
 ```
 
+We made a graph of total sales by state to identify which state is selling the most. As seen above, we find that California is selling the most. One reason could be that, Californian's have a higher income and are able to purchase more product. But a closer look at the dataset reveals that, the dataset has 4 stores for California and 3 for Texas and Wisconsin. This is also verified in the next graph. 
+
+
 ```{r, include=TRUE}
 ggplot(df_state_ave, aes(x=state_id, y=avg_sales, fill=state_id)) + 
   geom_col(width = 0.7)+ labs(
@@ -44,8 +125,12 @@ ggplot(df_state_ave, aes(x=state_id, y=avg_sales, fill=state_id)) +
         )
 ```
 
+
+Here, we see that the average sale per product per day is very similar for all states. This shows that on average, the walmart stores sell the same. And the discrepancy in the total_sales graph is due to the extra store that the dataset records for California. 
+
+
 ```{r,include=TRUE}
-df_weekday <- df %>% group_by(state_id, weekday) %>% summarise(total_sales = sum(sales))
+df_weekday <- df_train %>% group_by(state_id, weekday) %>% summarise(total_sales = sum(sales))
 df_weekday <- df_weekday %>%
   group_by(weekday) %>%
   mutate(pct_sales = total_sales / sum(total_sales) * 100)
@@ -57,3 +142,6 @@ ggplot(df_weekday, aes(x=weekday, y=total_sales, fill=state_id, label = paste0(r
   geom_text( 
   size = 2, position = position_stack(vjust = 0.5),colour = "white")
 ```
+
+We decided to visualize the total sales on each day. We find that the most sales happen on Saturday and Sunday which is expected as they are the weekend. And we also find the percentage of sales for each state is constant and california contributes more to the total sales / day due to the extra store for California. 
+
