@@ -96,7 +96,7 @@ ggplot(df_summary2, aes(x = month_year_index, y = mean_sell_price, color = cat_i
                      labels = break_labels$month_year_label)
 ```
 
-
+This graph demonstrates the average sell price of each category sold at Walmart over time. We can see that during this time frame, the average sell price of food products stays relatively constant, with minimal rise over time. Hobbies and household products consistently have a higher mean sell price than food products, with the mean sell price of hobbies overtaking household around the fourth quarter of 2013. Hobbies continues to have a higher mean sell price going into 2016.
 
 ```{r, include=FALSE}
 df_state = df %>% group_by(state_id) %>% summarise(total_sales = sum(sales))
