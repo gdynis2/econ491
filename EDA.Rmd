@@ -11,8 +11,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r setup}
-setwd("/Users/khushal/Desktop/Econ491-Analysis/Walmart")
+```{r}
 library(tidyverse)
 library(stats)
 library(ggplot2)
@@ -49,16 +48,16 @@ df_train <- df_train %>%
 ```
 
 ```{r}
-breaks_6_months <- seq(1, max(df_summary$month_year_index), by = 6)
-break_labels <- df_labels %>%
-  filter(month_year_index %in% breaks_6_months)
+df_labels <- df_train %>%
+  select(month_year_index, month_year_label) %>%
+  distinct()
 ```
 
 
 ```{r}
-df_labels <- df_train %>%
-  select(month_year_index, month_year_label) %>%
-  distinct()
+breaks_6_months <- seq(1, max(df_summary$month_year_index), by = 6)
+break_labels <- df_labels %>%
+  filter(month_year_index %in% breaks_6_months)
 ```
 
 
@@ -76,6 +75,8 @@ ggplot(df_summary, aes(x = month_year_index, y = total_sales, color = state_id, 
     labels = break_labels$month_year_label
   )
 ```
+Here we have a graph that shows the total number of sales made per month by state. California's numbers clear those of Texas and Wisconsin mostly due to the fact that our dataset pulls data from four stores in California and just 3 each in Texas and Wisconsin. If you normalize California's numbers to match the number of stores in TX and WI, then the graphs match quite well. There is obvious seasonality as each line peaks in August every year, which we have correlated with back to school shopping being the primary driver. There are also smaller peaks that occur yearly in December for holiday shopping.
+
 
 ```{r}
 df_summary2 <- df_train %>%
@@ -99,8 +100,8 @@ ggplot(df_summary2, aes(x = month_year_index, y = mean_sell_price, color = cat_i
 This graph demonstrates the average sell price of each category sold at Walmart over time. We can see that during this time frame, the average sell price of food products stays relatively constant, with minimal rise over time. Hobbies and household products consistently have a higher mean sell price than food products, with the mean sell price of hobbies overtaking household around the fourth quarter of 2013. Hobbies continues to have a higher mean sell price going into 2016.
 
 ```{r, include=FALSE}
-df_state = df %>% group_by(state_id) %>% summarise(total_sales = sum(sales))
-df_state_ave = df %>% group_by(state_id) %>% summarise(avg_sales = mean(sales))
+df_state = df_train %>% group_by(state_id) %>% summarise(total_sales = sum(sales))
+df_state_ave = df_train %>% group_by(state_id) %>% summarise(avg_sales = mean(sales))
 ```
 
 ```{r, include=TRUE}
@@ -114,7 +115,7 @@ ggplot(data = df_state, aes(x=state_id, y=total_sales, fill=state_id)) +
         )
 ```
 
-We made a graph of total sales by state to identify which state is selling the most. As seen above, we find that California is selling the most. One reason could be that, Californian's have a higher income and are able to purchase more product. But a closer look at the dataset reveals that, the dataset has 4 stores for California and 3 for Texas and Wisconsin. This is also verified in the next graph. 
+We made a graph of total sales by state to identify which state is selling the most. As seen above, we find that California is selling the most. One reason could be that Californians have a higher income and are able to purchase more product. But a closer look at the dataset reveals that the dataset has 4 stores for California and 3 for Texas and Wisconsin. This is also verified in the next graph. 
 
 
 ```{r, include=TRUE}
@@ -126,7 +127,7 @@ ggplot(df_state_ave, aes(x=state_id, y=avg_sales, fill=state_id)) +
 ```
 
 
-Here, we see that the average sale per product per day is very similar for all states. This shows that on average, the walmart stores sell the same. And the discrepancy in the total_sales graph is due to the extra store that the dataset records for California. 
+Here, we see that the average sale per product per day is very similar for all states. This shows that on average, the Walmart stores sell the same. And the discrepancy in the total_sales graph is due to the extra store that the dataset records for California. 
 
 
 ```{r,include=TRUE}
@@ -143,5 +144,5 @@ ggplot(df_weekday, aes(x=weekday, y=total_sales, fill=state_id, label = paste0(r
   size = 2, position = position_stack(vjust = 0.5),colour = "white")
 ```
 
-We decided to visualize the total sales on each day. We find that the most sales happen on Saturday and Sunday which is expected as they are the weekend. And we also find the percentage of sales for each state is constant and california contributes more to the total sales / day due to the extra store for California. 
+We decided to visualize the total sales on each day. We find that the most sales happen on Saturday and Sunday which is expected as they are the weekend. And we also find the percentage of sales for each state is constant and California contributes more to the total sales / day due to the extra store for California. 
 
