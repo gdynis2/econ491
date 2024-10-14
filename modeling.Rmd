@@ -1,0 +1,83 @@
+---
+title: "ml"
+author: "Khushal Gentela"
+date: "2024-10-09"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup}
+setwd("/Users/khushal/Desktop/Econ491-Analysis/Walmart")
+library(tidyverse)
+library(stats)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(reshape2)
+library(data.table)
+library(scales)
+require(caTools)
+library(caret)
+library(bigvis)
+
+```
+
+```{r, include=TRUE}
+df_TX = read_csv("df_TX.csv")
+cutOff = floor(0.75 * nrow(df_TX))
+train = head(df_TX, cutOff)
+test = tail(df_TX, nrow(df_TX) - cutOff)
+print(dim(train))
+print(dim(test))
+
+lm_model_tx <- lm(sales ~ sell_price + FOODS + HOBBIES + HOUSEHOLD +
+                 Monday + Tuesday + Wednesday + Thursday + Friday + Saturday + Sunday +
+                 event, train)
+summary(lm_model_tx)
+
+
+```
+
+```{r, include=TRUE}
+actual_y = test$sales
+test_features = test[, -12]
+predictions = as.numeric(predict(lm_model_tx, test_features))
+
+```
+
+```{r, include=TRUE}
+library(data.table())
+mse = mean((actual_y - predictions)^2, na.rm=TRUE)
+rmse = sqrt(mse)
+print(rmse)
+
+squared_errors = (actual_y - predictions)^2
+errors = (actual_y - predictions)
+
+df <- data.table(data.frame(Index = seq_along(squared_errors), SquaredError = squared_errors))
+
+num_bins = 1000
+
+df[, Bin := cut(Index, breaks = num_bins, labels = FALSE)]  # Assign each row to a bin
+binned_data <- df[, .(MeanError = mean(SquaredError)), by = Bin]  # Aggregate mean of each bin
+
+# Convert bin numbers back to a proper x-axis value (like midpoint of the bins)
+binned_data[, BinIndex := (as.numeric(Bin) - 0.5) * (max(df$Index) / num_bins)]
+
+# Plot the binned data using ggplot2
+ggplot(binned_data, aes(x = BinIndex, y = MeanError)) +
+  geom_line(color = "blue") +
+  labs(title = "Binned Line Plot of Squared Errors", x = "Index", y = "Mean Squared Error") +
+  ylim(0, 200) +
+  theme_minimal()
+
+
+
+
+```
