@@ -1,0 +1,172 @@
+---
+title: "TimeSeries"
+author: "Khushal Gentela"
+date: "2024-10-30"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(tsibble)
+library(fastDummies)
+setwd("~/Desktop/Econ491-Analysis/Walmart")
+```
+
+```{r, include=FALSE}
+#Cleaning Data
+df_summary <- read.csv("df_summary.csv")
+
+df_TX = df_summary %>% filter(state_id == 'TX')
+df_TX = subset(df_TX, select = -c(state_id, snap_WI, snap_CA))
+
+df_TX$month = month.name[df_TX$month]
+
+df_TX = df_TX %>% 
+            mutate(
+              is_Christmas = ifelse(event_name_1 == 'Christmas', 1, 0),
+              is_NewYear = ifelse(event_name_1 == 'NewYear', 1, 0),
+              is_MothersDay = ifelse(event_name_1 == 'Mother\'s day', 1, 0),
+              is_LaborDay = ifelse(event_name_1 == 'LaborDay', 1, 0),
+              is_event = ifelse(event_name_1 != 'None' & !event_name_1 %in% 
+                                  c("Christmas", "NewYear", "Mother\'s day", 
+                                    "LaborDay"), 1, 0)
+            )
+df_TX= subset(df_TX, select = -c(month, year, event_name_1, event_name_2))
+```
+
+```{r, include=FALSE}
+#Model Training
+
+df_TX_train = dummy_cols(df_TX, select_columns = c("weekday"))
+
+df_TX_train = subset(df_TX_train, select = -c(weekday))
+
+rownames(df_TX_train) = df_TX_train$date
+df_TX_train$date = NULL
+
+
+
+train_df = head(df_TX_train, 1913 - 28)
+test_df = tail(df_TX_train, 28)
+
+print(dim(train_df))
+print(dim(test_df))
+
+lm_model_tx <- lm(total_sales ~ . -1, train_df)
+summary(lm_model_tx)
+```
+
+```{r, include=TRUE}
+#Time Series AutoCorrelation Plot
+
+# plot(df_TX_train[1:365,]$total_sales)
+# plot(df_TX_train[1:365,]$mean_sell_price)
+lag.plot(df_TX_train$total_sales, 10)
+p <- df_summary %>%
+  mutate(
+    date = as.Date(date,"%Y-%m-%d")
+  ) %>%
+  ggplot(aes(date, total_sales, color = year)) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b")
+p + geom_line()
+```
+
+```{r, include=FALSE}
+df_TX_ts <- df_summary %>%
+  filter(state_id == 'TX') %>%
+  arrange(date) %>%  # Make sure data is sorted by date
+  mutate(
+    total_sales_lag1 = lag(total_sales, 1),
+    total_sales_lag2 = lag(total_sales, 2),
+    total_sales_lag3 = lag(total_sales, 3),
+    total_sales_lag4 = lag(total_sales, 4),
+    total_sales_lag5 = lag(total_sales, 5),
+    total_sales_lag6 = lag(total_sales, 6),
+    total_sales_lag7 = lag(total_sales, 7)
+  )
+```
+
+```{r, include=FALSE}
+#Feature engineering again
+
+df_TX_ts = subset(df_TX_ts, select = -c(state_id, snap_WI, snap_CA, state_id))
+
+df_TX_ts$month = month.name[df_TX_ts$month]
+
+df_TX_ts = df_TX_ts %>% 
+            mutate(
+              is_Christmas = ifelse(event_name_1 == 'Christmas', 1, 0),
+              is_NewYear = ifelse(event_name_1 == 'NewYear', 1, 0),
+              is_MothersDay = ifelse(event_name_1 == 'Mother\'s day', 1, 0),
+              is_LaborDay = ifelse(event_name_1 == 'LaborDay', 1, 0),
+              is_event = ifelse(event_name_1 != 'None' & !event_name_1 %in% 
+                                  c("Christmas", "NewYear", "Mother\'s day", 
+                                    "LaborDay"), 1, 0)
+            )
+
+df_TX_ts = dummy_cols(df_TX_ts, select_columns = c("weekday", "month"))
+df_TX_ts= subset(df_TX_ts, select = -c(month, year, event_name_1, event_name_2))
+
+  
+
+
+df_TX_ts_train = subset(df_TX_ts, select = -c(weekday))
+
+rownames(df_TX_ts_train) = df_TX_ts_train$date
+df_TX_ts_train$date = NULL
+
+```
+
+```{r, include=FALSE}
+
+train_df = head(df_TX_ts_train, 1913 - 28)
+test_df = tail(df_TX_ts_train, 28)
+
+print(dim(train_df))
+print(dim(test_df))
+
+lm_model_tx <- lm(total_sales ~ . - 1, train_df)
+summary(lm_model_tx)
+```
+
+```{r, include=FALSE}
+#Calculate RMSE
+
+actual_y = test_df$total_sales
+test_values <- subset(test_df, select = -c(total_sales))
+
+predictions = as.numeric(predict(lm_model_tx, test_values))
+
+mse = mean((actual_y - predictions)^2, na.rm=TRUE)
+rmse = sqrt(mse)
+print(rmse)
+
+squared_errors = (actual_y - predictions)^2
+errors = (actual_y - predictions)
+
+plot_df_errors = data.frame(date = as.Date(rownames(test_df)), errors = errors, squared_errors = squared_errors)
+
+plot_df_errors <- plot_df_errors %>%
+  mutate(
+    normalized_errors = (errors - min(errors)) / (max(errors) - min(errors)),
+    normalized_squared_errors = (squared_errors - min(squared_errors)) / (max(squared_errors) - min(squared_errors))
+  )
+
+
+ggplot(plot_df_errors, aes(x = date)) +
+  geom_line(aes(y = normalized_errors, color = "Errors")) + 
+  geom_line(aes(y = normalized_squared_errors, color = "SquaredErrors"))+
+  labs(title = "Line Plot of Errors", x = "Date", y = "Error") +
+  theme_minimal()
+
+
+```
