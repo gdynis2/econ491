@@ -1,0 +1,62 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(tsibble)
+library(fastDummies)
+library(reshape2)
+setwd("~/Desktop/Econ491-Analysis/Walmart")
+```
+
+```{r, include=TRUE}
+df_cal <- read.csv('calendar.csv', stringsAsFactors = FALSE)
+df_cal$date = as.character(df_cal$date)
+df_sales_test <- read.csv('sales_test_validation.csv', stringsAsFactors = FALSE)
+df_prices <- read.csv('sell_prices.csv', stringsAsFactors = FALSE)
+```
+
+```{r, include=TRUE}
+start_date <- as.Date("2016-04-25")
+num_days <- 28
+date_sequence <- seq.Date(from = start_date, by = "day", length.out = num_days)
+d_columns <- grep("^d_", colnames(df_sales_test), value = TRUE)
+colnames(df_sales_test)[colnames(df_sales_test) %in% d_columns] <- as.character(date_sequence)
+
+list_id_vars <- c('item_id', 'dept_id', 'cat_id', 'store_id', 'state_id')
+df_melted_sales <- melt(df_sales_test, id.vars = list_id_vars, variable.name = 'd', value.name = 'sales')
+names(df_melted_sales)[names(df_melted_sales) == "d"] <- "date"
+
+df_train <- merge(df_melted_sales, df_cal, by = 'date')
+
+df_prices$id <- paste(df_prices$item_id, df_prices$store_id, sep = "_")
+df_prices <- df_prices[, !(names(df_prices) %in% c('item_id', 'store_id'))]
+
+df_train$id <- paste(df_train$item_id, df_train$store_id, sep = "_")
+
+df_train <- merge(df_train, df_prices, by = c('id', 'wm_yr_wk'))
+```
+
+```{r, include=TRUE}
+ df_t <- df_train %>%
+  group_by(date, state_id, weekday, month, year, event_name_1, event_name_2, snap_CA, snap_TX, snap_WI) %>%
+  mutate(
+    total_sales = sum(sales, na.rm = TRUE),
+    avg_sell_price = mean(sell_price, na.rm = TRUE)
+  )
+```
+
+
+
+```{r, include=TRUE}
+write.csv(df_temp, "validation_set.csv", row.names = FALSE)
+```
