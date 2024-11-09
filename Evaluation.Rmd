@@ -15,48 +15,88 @@ library(ggplot2)
 library(tsibble)
 library(fastDummies)
 library(reshape2)
-setwd("~/Desktop/Econ491-Analysis/Walmart")
-```
-
-```{r, include=TRUE}
-df_cal <- read.csv('calendar.csv', stringsAsFactors = FALSE)
-df_cal$date = as.character(df_cal$date)
-df_sales_test <- read.csv('sales_test_validation.csv', stringsAsFactors = FALSE)
-df_prices <- read.csv('sell_prices.csv', stringsAsFactors = FALSE)
-```
-
-```{r, include=TRUE}
-start_date <- as.Date("2016-04-25")
-num_days <- 28
-date_sequence <- seq.Date(from = start_date, by = "day", length.out = num_days)
-d_columns <- grep("^d_", colnames(df_sales_test), value = TRUE)
-colnames(df_sales_test)[colnames(df_sales_test) %in% d_columns] <- as.character(date_sequence)
-
-list_id_vars <- c('item_id', 'dept_id', 'cat_id', 'store_id', 'state_id')
-df_melted_sales <- melt(df_sales_test, id.vars = list_id_vars, variable.name = 'd', value.name = 'sales')
-names(df_melted_sales)[names(df_melted_sales) == "d"] <- "date"
-
-df_train <- merge(df_melted_sales, df_cal, by = 'date')
-
-df_prices$id <- paste(df_prices$item_id, df_prices$store_id, sep = "_")
-df_prices <- df_prices[, !(names(df_prices) %in% c('item_id', 'store_id'))]
-
-df_train$id <- paste(df_train$item_id, df_train$store_id, sep = "_")
-
-df_train <- merge(df_train, df_prices, by = c('id', 'wm_yr_wk'))
-```
-
-```{r, include=TRUE}
- df_t <- df_train %>%
-  group_by(date, state_id, weekday, month, year, event_name_1, event_name_2, snap_CA, snap_TX, snap_WI) %>%
-  mutate(
-    total_sales = sum(sales, na.rm = TRUE),
-    avg_sell_price = mean(sell_price, na.rm = TRUE)
-  )
+library(forecast)
+setwd("~/Desktop/Econ491-Analysis/Walmart") #Change to your own working directory
 ```
 
 
+```{r, include=TRUE}
+df_validation = read_csv("validation_set.csv")
+
+df_tx_val = df_validation %>% filter(state_id == 'TX')
+df_tx_val = subset(df_tx_val, select = -c(state_id, snap_WI, snap_CA))
+
+df_tx_val$month = month.name[df_tx_val$month]
+
+df_tx_val = df_tx_val %>% 
+            mutate(
+              is_Christmas = ifelse(event_name_1 == 'Christmas', 1, 0),
+              is_NewYear = ifelse(event_name_1 == 'NewYear', 1, 0),
+              is_MothersDay = ifelse(event_name_1 == 'Mother\'s day', 1, 0),
+              is_LaborDay = ifelse(event_name_1 == 'LaborDay', 1, 0),
+              is_event = ifelse(event_name_1 != 'None' & !event_name_1 %in% 
+                                  c("Christmas", "NewYear", "Mother\'s day", 
+                                    "LaborDay"), 1, 0)
+            )
+df_tx_val= subset(df_tx_val, select = -c(month, year, event_name_1, event_name_2))
+
+df_tx_val_1 = dummy_cols(df_tx_val, select_columns = c("weekday"))
+
+df_tx_val_1 = subset(df_tx_val_1, select = -c(weekday))
+
+rownames(df_tx_val_1) = df_tx_val_1$date
+df_tx_val_1$date = NULL
+```
 
 ```{r, include=TRUE}
-write.csv(df_temp, "validation_set.csv", row.names = FALSE)
+#Replace NA's with 0
+
+df_tx_val_1[is.na(df_tx_val_1)] <- 0
+
+test_exogenous_vars <- df_tx_val_1[, setdiff(names(df_tx_val_1), c("total_sales", "weekday_Sunday"))]
+test_exogenous_vars <- test_exogenous_vars %>%
+  rename(mean_sell_price = avg_sell_price)
+
+
+forecast_values <- forecast(model, xreg = as.matrix(test_exogenous_vars), h = nrow(df_tx_val_1))
+
+predicted_values <- as.numeric(forecast_values$mean)
+actual_values <- df_tx_val_1$total_sales
+```
+
+```{r, include=TRUE}
+#### RMSE for test validation set
+rmse <- sqrt(mean((actual_values - predicted_values)^2))
+
+print(paste("Root Mean Squared Error (RMSE):", round(rmse, 4)))
+```
+
+```{r, include=TRUE}
+#### Plotting actual vs predicted
+
+plot_data <- data.frame(Actual = actual_values, Predicted = predicted_values)
+
+# Plot predicted vs actual values
+ggplot(plot_data, aes(x = Predicted, y = Actual)) +
+  geom_point(color = "blue") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +  # 1:1 line for reference
+  labs(title = "Predicted vs Actual Values",
+       x = "Predicted Total Sales",
+       y = "Actual Total Sales") +
+  theme_minimal()
+```
+
+```{r, include=TRUE}
+squared_errors <- (actual_values - predicted_values)^2
+
+# Create a data frame for plotting
+error_data <- data.frame(Index = 1:length(squared_errors), Squared_Error = squared_errors)
+
+# Plot squared errors
+ggplot(error_data, aes(x = Index, y = Squared_Error)) +
+  geom_line() +  # Use geom_bar for a bar plot
+  labs(title = "Squared Errors of Predictions",
+       x = "Index",
+       y = "Squared Error") +
+  theme_minimal()
 ```
