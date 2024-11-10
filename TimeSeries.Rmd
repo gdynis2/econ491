@@ -25,11 +25,15 @@ setwd("~/Desktop/Econ491-Analysis/Walmart")
 #Cleaning Data
 df_summary <- read.csv("df_summary.csv")
 
+#🚨 ALERT MAKE SURE TO use df_{yourstate}. A simple way to do that is ctrl + f. find df_TX and replace with df_{yourstate}. 
+
 df_TX = df_summary %>% filter(state_id == 'TX')
-df_TX = subset(df_TX, select = -c(state_id, snap_WI, snap_CA))
+df_TX = subset(df_TX, select = -c(state_id, snap_WI, snap_CA)) # 🚨 ALERT change the snaps
 
 df_TX$month = month.name[df_TX$month]
 
+
+#### 🚨 ALERT CHANGE THIS TO MATCH YOUR DUMMIES ####
 df_TX = df_TX %>% 
             mutate(
               is_Christmas = ifelse(event_name_1 == 'Christmas', 1, 0),
@@ -70,6 +74,8 @@ p + geom_line()
 ```
 
 ```{r, include=FALSE}
+
+#### 🚨 ALERT MAKE SURE TO change state_id to {yourstate}
 df_TX_ts <- df_summary %>%
   filter(state_id == 'TX') %>%
   arrange(date) %>%  # Make sure data is sorted by date
@@ -87,9 +93,12 @@ df_TX_ts <- df_summary %>%
 ```{r, include=FALSE}
 #Feature engineering again
 
+# 🚨 ALERT Change the snaps
 df_TX_ts = subset(df_TX_ts, select = -c(state_id, snap_WI, snap_CA, state_id))
 
 df_TX_ts$month = month.name[df_TX_ts$month]
+
+#🚨 ALERT Change dummies
 
 df_TX_ts = df_TX_ts %>% 
             mutate(
@@ -117,32 +126,31 @@ df_TX_ts_train$date = NULL
 
 ```{r, include=FALSE}
 
-train_df = head(df_TX_ts_train, 1913 - 28)
-test_df = tail(df_TX_ts_train, 28)
+train_df = df_TX_ts_train
 
 print(dim(train_df))
-print(dim(test_df))
 
 lm_model_tx <- lm(total_sales ~ . - 1, train_df)
 summary(lm_model_tx)
 ```
 
 ```{r, include=FALSE}
-#Calculate RMSE
+#Calculate RMSE for training dataset only
 
-actual_y = test_df$total_sales
-test_values <- subset(test_df, select = -c(total_sales))
+actual_y = train_df$total_sales
+test_values <- subset(train_df, select = -c(total_sales))
+test_values = test_values[complete.cases(test_values), ]
 
 predictions = as.numeric(predict(lm_model_tx, test_values))
 
 mse = mean((actual_y - predictions)^2, na.rm=TRUE)
 rmse = sqrt(mse)
-print(rmse)
+print(rmse) #1228.122 for Texas
 
 squared_errors = (actual_y - predictions)^2
 errors = (actual_y - predictions)
 
-plot_df_errors = data.frame(date = as.Date(rownames(test_df)), errors = errors, squared_errors = squared_errors)
+plot_df_errors = data.frame(date = as.Date(rownames(train_df)), errors = errors, squared_errors = squared_errors)
 
 plot_df_errors <- plot_df_errors %>%
   mutate(
@@ -171,9 +179,9 @@ df_TX_train$date = NULL
 
 
 
-train_df = head(df_TX_train, 1913 - 28)
-test_df = tail(df_TX_train, 28)
-total_sales_ts <- ts(train_df$total_sales, frequency = 365)  # Adjust frequency based on your data (e.g., 7 for weekly, 365 for daily)
+train_df = df_TX_train
+
+total_sales_ts <- ts(train_df$total_sales, frequency = 30)  # Adjust frequency based on your data (e.g., 7 for weekly, 365 for daily)
 
 # Define exogenous variables (all other columns except total_sales)
 exogenous_vars <- train_df[, setdiff(names(train_df), c("total_sales", "weekday_Sunday"))]
@@ -186,17 +194,19 @@ summary(model)
 ```
 
 ```{r, include=TRUE}
-#### RMSE Calculation ####
-test_exogenous_vars <- test_df[, setdiff(names(test_df), c("total_sales", "weekday_Sunday"))]
+#### RMSE Calculation only for training dataset####
+test_exogenous_vars <- train_df[, setdiff(names(train_df), c("total_sales", "weekday_Sunday"))]
 
-forecast_values <- forecast(model, xreg = as.matrix(test_exogenous_vars), h = nrow(test_df))
+forecast_values <- forecast(model, xreg = as.matrix(test_exogenous_vars), h = nrow(train_df))
 
 predicted_values <- as.numeric(forecast_values$mean)
-actual_values <- test_df$total_sales
+actual_values <- train_df$total_sales
 
 rmse <- sqrt(mean((actual_values - predicted_values)^2))
 
-print(paste("Root Mean Squared Error (RMSE):", round(rmse, 4)))
+print(paste("Root Mean Squared Error (RMSE) for training dataset:", round(rmse, 4)))
+
+#RMSE is 1781.18
 ```
 
 ```{r, include=TRUE}
@@ -205,12 +215,12 @@ print(paste("Root Mean Squared Error (RMSE):", round(rmse, 4)))
 plot_data <- data.frame(Actual = actual_values, Predicted = predicted_values)
 
 # Plot predicted vs actual values
-ggplot(plot_data, aes(x = Actual, y = Predicted)) +
+ggplot(plot_data, aes(x = Predicted, y = Actual)) +
   geom_point(color = "blue") +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +  # 1:1 line for reference
   labs(title = "Predicted vs Actual Values",
-       x = "Actual Total Sales",
-       y = "Predicted Total Sales") +
+       x = "Predicted Total Sales",
+       y = "Actual Total Sales") +
   theme_minimal()
 ```
 
@@ -228,3 +238,4 @@ ggplot(error_data, aes(x = Index, y = Squared_Error)) +
        y = "Squared Error") +
   theme_minimal()
 ```
+
