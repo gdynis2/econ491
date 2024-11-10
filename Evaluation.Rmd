@@ -16,17 +16,22 @@ library(tsibble)
 library(fastDummies)
 library(reshape2)
 library(forecast)
-setwd("~/Desktop/Econ491-Analysis/Walmart") #Change to your own working directory
+setwd("~/Desktop/Econ491-Analysis/Walmart")
 ```
 
 
 ```{r, include=TRUE}
 df_validation = read_csv("validation_set.csv")
 
+# 🚨 ALERT change state_id. And similary replace all instance of df_tx with 
+# df_{yourstate}
+
 df_tx_val = df_validation %>% filter(state_id == 'TX')
-df_tx_val = subset(df_tx_val, select = -c(state_id, snap_WI, snap_CA))
+df_tx_val = subset(df_tx_val, select = -c(state_id, snap_WI, snap_CA)) # 🚨 ALERT change snaps
 
 df_tx_val$month = month.name[df_tx_val$month]
+
+# 🚨 ALERT Change Dummies
 
 df_tx_val = df_tx_val %>% 
             mutate(
@@ -45,6 +50,9 @@ df_tx_val_1 = dummy_cols(df_tx_val, select_columns = c("weekday"))
 df_tx_val_1 = subset(df_tx_val_1, select = -c(weekday))
 
 rownames(df_tx_val_1) = df_tx_val_1$date
+
+df_tx_val_1 <- df_tx_val_1 %>%
+  rename(mean_sell_price = avg_sell_price)
 df_tx_val_1$date = NULL
 ```
 
@@ -54,8 +62,6 @@ df_tx_val_1$date = NULL
 df_tx_val_1[is.na(df_tx_val_1)] <- 0
 
 test_exogenous_vars <- df_tx_val_1[, setdiff(names(df_tx_val_1), c("total_sales", "weekday_Sunday"))]
-test_exogenous_vars <- test_exogenous_vars %>%
-  rename(mean_sell_price = avg_sell_price)
 
 
 forecast_values <- forecast(model, xreg = as.matrix(test_exogenous_vars), h = nrow(df_tx_val_1))
@@ -68,7 +74,7 @@ actual_values <- df_tx_val_1$total_sales
 #### RMSE for test validation set
 rmse <- sqrt(mean((actual_values - predicted_values)^2))
 
-print(paste("Root Mean Squared Error (RMSE):", round(rmse, 4)))
+print(paste("Root Mean Squared Error (RMSE):", round(rmse, 4))) #1052.4564
 ```
 
 ```{r, include=TRUE}
@@ -92,11 +98,116 @@ squared_errors <- (actual_values - predicted_values)^2
 # Create a data frame for plotting
 error_data <- data.frame(Index = 1:length(squared_errors), Squared_Error = squared_errors)
 
+error_data <- error_data %>%
+  mutate(
+    normalized_squared_errors = (Squared_Error - min(Squared_Error)) / (max(Squared_Error) - min(Squared_Error))
+)
+  
+
 # Plot squared errors
-ggplot(error_data, aes(x = Index, y = Squared_Error)) +
+ggplot(error_data, aes(x = Index, y = normalized_squared_errors)) +
   geom_line() +  # Use geom_bar for a bar plot
   labs(title = "Squared Errors of Predictions",
        x = "Index",
        y = "Squared Error") +
+  theme_minimal()
+```
+
+```{r, include=TRUE}
+### Clean and Arrange dataset for AR predictions
+df_tx_val_2 <- df_validation %>%
+  filter(state_id == 'TX') %>%
+  arrange(date) %>%  # Make sure data is sorted by date
+  mutate(
+    total_sales_lag1 = lag(total_sales, 1),
+    total_sales_lag2 = lag(total_sales, 2),
+    total_sales_lag3 = lag(total_sales, 3),
+    total_sales_lag4 = lag(total_sales, 4),
+    total_sales_lag5 = lag(total_sales, 5),
+    total_sales_lag6 = lag(total_sales, 6),
+    total_sales_lag7 = lag(total_sales, 7)
+  )
+
+df_tx_val_2 = subset(df_tx_val_2, select = -c(state_id, snap_WI, snap_CA))
+
+df_tx_val_2$month = month.name[df_tx_val_2$month]
+
+df_tx_val_2 = df_tx_val_2 %>% 
+            mutate(
+              is_Christmas = ifelse(event_name_1 == 'Christmas', 1, 0),
+              is_NewYear = ifelse(event_name_1 == 'NewYear', 1, 0),
+              is_MothersDay = ifelse(event_name_1 == 'Mother\'s day', 1, 0),
+              is_LaborDay = ifelse(event_name_1 == 'LaborDay', 1, 0),
+              is_event = ifelse(event_name_1 != 'None' & !event_name_1 %in% 
+                                  c("Christmas", "NewYear", "Mother\'s day", 
+                                    "LaborDay"), 1, 0)
+            )
+df_tx_val_2= subset(df_tx_val_2, select = -c(year, event_name_1, event_name_2))
+
+df_tx_val_2 = dummy_cols(df_tx_val_2, select_columns = c("weekday"))
+df_tx_val_2 = dummy_cols(df_tx_val_2, select_columns = c("month"))
+
+month_order <- c("month_April", "month_August", "month_December", "month_February", 
+                 "month_January", "month_July", "month_June", "month_March", 
+                 "month_May", "month_November", "month_October", "month_September")
+
+for (month in month_order) {
+  if (!month %in% colnames(df_tx_val_2)) {
+    df_tx_val_2[[month]] <- 0
+  }
+}
+
+month_columns <- df_tx_val_2[, month_order, drop = FALSE]
+other_columns <- df_tx_val_2[, setdiff(names(df_tx_val_2), month_order), drop = FALSE]
+
+# Combine other columns with the month columns in the correct order
+df_tx_val_2 <- cbind(other_columns, month_columns)
+
+df_tx_val_2 = subset(df_tx_val_2, select = -c(weekday, month))
+
+rownames(df_tx_val_2) = df_tx_val_2$date
+
+lag_columns <- paste("total_sales_lag", 1:7, sep = "")
+
+# Remove rows where any of the lag columns have NA
+df_tx_val_2 <- df_tx_val_2[!apply(df_tx_val_2[, lag_columns], 1, function(x) any(is.na(x))), ]
+
+df_tx_val_2[is.na(df_tx_val_2)] <- 0
+
+df_tx_val_2 <- df_tx_val_2 %>%
+  rename(mean_sell_price = avg_sell_price)
+df_tx_val_2$date = NULL
+
+```
+
+```{r, include=TRUE}
+#### RMSE for simple AR model
+
+actual_y_ar = df_tx_val_2$total_sales
+test_values_ar <- subset(df_tx_val_2, select = -c(total_sales))
+
+
+
+predictions_ar = as.numeric(predict(lm_model_tx, test_values_ar))
+
+mse = mean((actual_y_ar - predictions_ar)^2, na.rm=TRUE)
+rmse = sqrt(mse)
+print(rmse) #872.1045 for Texas
+
+squared_errors = (actual_y_ar - predictions_ar)^2
+errors = (actual_y_ar - predictions_ar)
+
+plot_df_errors = data.frame(date = as.Date(rownames(df_tx_val_2)), errors = errors, squared_errors = squared_errors)
+
+plot_df_errors <- plot_df_errors %>%
+  mutate(
+    normalized_errors = (errors - min(errors)) / (max(errors) - min(errors)),
+    normalized_squared_errors = (squared_errors - min(squared_errors)) / (max(squared_errors) - min(squared_errors))
+  )
+
+
+ggplot(plot_df_errors, aes(x = date)) +
+  geom_line(aes(y = normalized_squared_errors, color = "SquaredErrors"))+
+  labs(title = "Line Plot of Errors", x = "Date", y = "Error") +
   theme_minimal()
 ```
